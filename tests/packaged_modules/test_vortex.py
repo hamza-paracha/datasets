@@ -1,3 +1,4 @@
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -90,6 +91,31 @@ def test_load_vortex_dataset_with_filters(vortex_hf_dataset, streaming, filters,
     dataset = load_dataset(vortex_hf_dataset, filters=filters, streaming=streaming, split="train")
 
     assert list(dataset["id"]) == expected_ids
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "column, op, values, expected_ids",
+    [
+        ("id", "in", np.array([1, 4]), [1, 4]),
+        ("id", "not in", np.array([1, 4]), [2, 3]),
+        ("id", "not in", np.array([0]), [1, 2, 3, 4]),
+        ("id", "==", np.int64(2), [2]),
+        ("value", ">", np.float64(20), [3, 4]),
+    ],
+)
+def test_load_vortex_dataset_with_numpy_filters(vortex_hf_dataset, streaming, column, op, values, expected_ids):
+    dataset = load_dataset(vortex_hf_dataset, filters=[(column, op, values)], streaming=streaming, split="train")
+
+    assert list(dataset["id"]) == expected_ids
+
+
+@pytest.mark.parametrize("op", ["in", "not in"])
+def test_vortex_filters_with_empty_numpy_values(op):
+    from datasets.packaged_modules.vortex.vortex import _filters_to_expression
+
+    with pytest.raises(ValueError, match=f"Empty set of values for '{op}' filter"):
+        _filters_to_expression([("id", op, np.array([], dtype=np.int64))])
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Union
 from urllib.parse import unquote
 
+import numpy as np
 import pyarrow as pa
 
 import datasets
@@ -117,6 +118,8 @@ def _filters_to_expression(filters: Union[list[tuple], list[list[tuple]]]) -> "v
 
     def predicate_to_expression(predicate) -> "vortex.expr.Expr":
         col, op, val = predicate
+        if isinstance(val, (np.ndarray, np.generic)):
+            val = val.tolist()
         column = ve.column(col)
         if op in _FILTER_COMPARISONS:
             return _FILTER_COMPARISONS[op](column, val)
