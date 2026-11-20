@@ -3,7 +3,20 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-from datasets import load_dataset
+from datasets import Features, Value, load_dataset
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("arrow_type", [pa.binary(), pa.large_binary()])
+@pytest.mark.parametrize("values", [[None, b"payload"], [None, None], [b"payload", None]])
+def test_load_lance_nullable_binary(tmp_path, streaming, arrow_type, values):
+    path = tmp_path / "nullable.lance"
+    lance.write_dataset(pa.table({"payload": pa.array(values, type=arrow_type)}), path)
+
+    dataset = load_dataset(str(path), split="train", streaming=streaming)
+
+    assert dataset.features == Features({"payload": Value(str(arrow_type))})
+    assert list(dataset) == [{"payload": value} for value in values]
 
 
 @pytest.fixture

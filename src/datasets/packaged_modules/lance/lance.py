@@ -141,9 +141,9 @@ class Lance(datasets.ArrowBasedBuilder, datasets.builder._CountableBuilderMixin)
                                     lance_datasets[0].take_blobs(field.name, [0])[0].read(16)
                                 )
                             except ValueError:
-                                first_row_first_bytes[field.name] = (
-                                    lance_datasets[0].take([0], [field.name]).to_pylist()[0][field.name][:16]
-                                )
+                                value = lance_datasets[0].take([0], [field.name]).to_pylist()[0][field.name]
+                                if value is not None:
+                                    first_row_first_bytes[field.name] = value[:16]
                 splits.append(
                     datasets.SplitGenerator(
                         name=split_name,
