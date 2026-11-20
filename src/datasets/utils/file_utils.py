@@ -1086,10 +1086,22 @@ def xwalk(urlpath, download_config: Optional[DownloadConfig] = None, **kwargs):
 class xPath(type(Path())):
     """Extension of `pathlib.Path` to support both local paths and remote URLs."""
 
+    download_config: Optional[DownloadConfig] = None
+
     def __init__(self, *args, download_config: Optional[DownloadConfig] = None):
         if sys.version_info >= (3, 12):
             super().__init__(*args)
         self.download_config = download_config
+
+    def with_segments(self, *pathsegments):
+        return type(self)(*pathsegments, download_config=self.download_config)
+
+    def with_name(self, name):
+        return self.with_segments(super().with_name(name))
+
+    def iterdir(self):
+        for path in super().iterdir():
+            yield self.with_segments(path)
 
     def __str__(self):
         path_str = super().__str__()
@@ -1110,7 +1122,9 @@ class xPath(type(Path())):
         Returns:
             `bool`
         """
-        return xexists(str(self), download_config=download_config)
+        return xexists(
+            str(self), download_config=download_config if download_config is not None else self.download_config
+        )
 
     def is_file(self, download_config: Optional[DownloadConfig] = None):
         """Extend `pathlib.Path.is_file` method to support both local and remote files.
@@ -1121,7 +1135,9 @@ class xPath(type(Path())):
         Returns:
             `bool`
         """
-        return xisfile(str(self), download_config=download_config)
+        return xisfile(
+            str(self), download_config=download_config if download_config is not None else self.download_config
+        )
 
     def is_dir(self, download_config: Optional[DownloadConfig] = None):
         """Extend `pathlib.Path.is_dir` method to support both local and remote files.
@@ -1132,7 +1148,9 @@ class xPath(type(Path())):
         Returns:
             `bool`
         """
-        return xisdir(str(self), download_config=download_config)
+        return xisdir(
+            str(self), download_config=download_config if download_config is not None else self.download_config
+        )
 
     def glob(self, pattern, download_config: Optional[DownloadConfig] = None):
         """Glob function for argument of type :obj:`~pathlib.Path` that supports both local paths end remote URLs.
@@ -1144,10 +1162,12 @@ class xPath(type(Path())):
         Yields:
             [`xPath`]
         """
+        download_config = download_config if download_config is not None else self.download_config
         posix_path = self.as_posix()
         main_hop, *rest_hops = posix_path.split("::")
         if is_local_path(main_hop):
-            yield from Path(main_hop).glob(pattern)
+            for path in Path(main_hop).glob(pattern):
+                yield type(self)(path, download_config=download_config)
         else:
             # globbing inside a zip in a private repo requires authentication
             if rest_hops:
@@ -1156,12 +1176,15 @@ class xPath(type(Path())):
                 storage_options = {urlpath.split("://")[0]: storage_options}
                 posix_path = "::".join([main_hop, urlpath, *rest_hops[1:]])
             else:
-                storage_options = None
+                posix_path, storage_options = _prepare_path_and_storage_options(
+                    posix_path, download_config=download_config
+                )
+                main_hop = posix_path
             fs, *_ = url_to_fs(xjoin(posix_path, pattern), **(storage_options or {}))
             globbed_paths = fs.glob(xjoin(main_hop, pattern))
             for globbed_path in globbed_paths:
                 yield type(self)(
-                    "::".join([f"{fs.protocol}://{globbed_path}"] + rest_hops), download_config=self.download_config
+                    "::".join([f"{fs.protocol}://{globbed_path}"] + rest_hops), download_config=download_config
                 )
 
     def rglob(self, pattern, **kwargs):

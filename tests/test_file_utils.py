@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import fsspec
 import pytest
 import zstandard as zstd
 from fsspec.registry import _registry as _fsspec_registry
@@ -742,6 +743,66 @@ class TestxPath:
     def test_xpath_init_invalid_path(self):
         with pytest.raises(TypeError):
             xPath(None)
+
+    @pytest.mark.parametrize("download_config", [None, DownloadConfig(token="token")])
+    @pytest.mark.parametrize(
+        "derive",
+        [
+            lambda p: p / "child.txt",
+            lambda p: p.parent,
+            lambda p: p.joinpath("child.txt"),
+            lambda p: p.with_suffix(".csv"),
+            lambda p: p.with_name("renamed.txt"),
+            lambda p: next(p.iterdir()),
+            lambda p: next(p.glob("*")),
+            lambda p: next(p.rglob("*")),
+        ],
+        ids=["division", "parent", "joinpath", "with_suffix", "with_name", "iterdir", "glob", "rglob"],
+    )
+    def test_xpath_derived_download_config(self, tmp_path, download_config, derive):
+        (tmp_path / "file.txt").touch()
+        path = derive(xPath(tmp_path, download_config=download_config))
+
+        assert isinstance(path, xPath)
+        assert path.download_config is download_config
+        with patch("datasets.utils.file_utils.xopen") as mock_open:
+            path.open()
+        mock_open.assert_called_once_with(str(path), download_config=download_config)
+
+    @pytest.mark.parametrize("method, function", [("exists", "xexists"), ("is_file", "xisfile"), ("is_dir", "xisdir")])
+    @pytest.mark.parametrize("override", [False, True])
+    def test_xpath_download_config(self, method, function, override):
+        download_config = DownloadConfig(token="token")
+        path = xPath("https://host.com/file.txt", download_config=download_config).with_name("other.txt")
+        kwargs = {"download_config": DownloadConfig(token="override")} if override else {}
+
+        with patch(f"datasets.utils.file_utils.{function}", return_value=True) as mock_function:
+            assert getattr(path, method)(**kwargs)
+
+        mock_function.assert_called_once_with(
+            str(path), download_config=kwargs.get("download_config", download_config)
+        )
+
+    @pytest.mark.parametrize("method", ["glob", "rglob"])
+    @pytest.mark.parametrize("override", [False, True])
+    def test_xpath_glob_download_config(self, method, override, mock_fsspec2):
+        download_config = DownloadConfig(storage_options={"mock": {"custom_option": "value"}})
+        path = xPath("mock://top_level", download_config=download_config)
+        kwargs = (
+            {"download_config": DownloadConfig(storage_options={"mock": {"custom_option": "override"}})}
+            if override
+            else {}
+        )
+        expected_config = kwargs.get("download_config", download_config)
+
+        with patch(
+            "datasets.utils.file_utils.url_to_fs", return_value=(fsspec.filesystem("mock"), "")
+        ) as mock_url_to_fs:
+            paths = list(getattr(path, method)("*", **kwargs))
+
+        assert paths
+        assert all(p.download_config is expected_config for p in paths)
+        assert mock_url_to_fs.call_args.kwargs == {"mock": expected_config.storage_options["mock"]}
 
     @pytest.mark.parametrize(
         "input_path",
