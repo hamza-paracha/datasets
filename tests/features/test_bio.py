@@ -110,6 +110,31 @@ def test_cast_storage_from_string_and_binary(feature_cls):
     assert from_bin.to_pylist() == [{"bytes": b"x", "path": None}]
 
 
+@pytest.mark.parametrize("feature_cls", [BioSequence, BioStructure])
+@pytest.mark.parametrize("arrow_type", ["large_string", "large_binary"])
+@pytest.mark.parametrize("empty", [False, True])
+def test_cast_column_from_large_string_and_binary(feature_cls, arrow_type, empty):
+    import pyarrow as pa
+
+    values = [] if empty else ["sample.dat", "", None]
+    if arrow_type == "large_binary":
+        values = [value.encode() if value is not None else None for value in values]
+    dataset = Dataset.from_dict({"col": pa.array(values, type=pa.type_for_alias(arrow_type))})
+    feature = feature_cls(decode=False)
+
+    dataset = dataset.cast_column("col", feature)
+
+    assert dataset.features == Features({"col": feature})
+    assert dataset.to_dict() == {
+        "col": [
+            ({"bytes": None, "path": value} if arrow_type == "large_string" else {"bytes": value, "path": None})
+            if value is not None
+            else None
+            for value in values
+        ]
+    }
+
+
 # --------------------------------------------------------------------------
 # Decoding. Requires biopython.
 # --------------------------------------------------------------------------

@@ -206,7 +206,9 @@ class BioStructure:
         The Arrow types that can be converted to the BioStructure pyarrow storage type are:
 
         - `pa.string()` - it must contain the "path" data
+        - `pa.large_string()` - it must contain the "path" data
         - `pa.binary()` - it must contain the file bytes
+        - `pa.large_binary()` - it must contain the file bytes
         - `pa.struct({"bytes": pa.binary()})`
         - `pa.struct({"path": pa.string()})`
         - `pa.struct({"bytes": pa.binary(), "path": pa.string()})`  - order doesn't matter
