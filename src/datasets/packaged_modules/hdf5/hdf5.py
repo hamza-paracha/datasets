@@ -74,7 +74,7 @@ class HDF5(datasets.ArrowBasedBuilder):
                         if self.info.features is None:
                             self.info.features = _recursive_infer_features(h5)
                         num_rows = _check_dataset_lengths(h5, self.info.features)
-                        if num_rows is None:
+                        if num_rows is None or num_rows == 0:
                             logger.warning(f"File {file} contains no data, skipping...")
                             continue
                         effective_batch = batch_size_cfg or self._writer_batch_size or num_rows

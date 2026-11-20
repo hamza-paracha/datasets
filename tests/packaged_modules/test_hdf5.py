@@ -9,6 +9,37 @@ from datasets.exceptions import DatasetGenerationError
 from datasets.packaged_modules.hdf5.hdf5 import HDF5, HDF5Config
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("batch_size", [None, 1])
+@pytest.mark.parametrize("empty_index", [0, 1, 2])
+def test_hdf5_zero_row_shard(tmp_path, streaming, batch_size, empty_index):
+    shards = [[1, 2], [3]]
+    shards.insert(empty_index, [])
+    paths = []
+    for index, values in enumerate(shards):
+        path = tmp_path / f"shard_{index}.h5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("value", data=np.array(values, dtype=np.int32))
+        paths.append(str(path))
+
+    dataset = load_dataset("hdf5", data_files=paths, split="train", streaming=streaming, batch_size=batch_size)
+
+    assert dataset.features == Features({"value": Value("int32")})
+    assert list(dataset) == [{"value": 1}, {"value": 2}, {"value": 3}]
+
+
+@pytest.mark.parametrize("batch_size", [None, 1])
+def test_hdf5_zero_row_streaming(tmp_path, batch_size):
+    path = tmp_path / "empty.h5"
+    with h5py.File(path, "w") as f:
+        f.create_dataset("value", shape=(0,), dtype=np.int32)
+
+    dataset = load_dataset("hdf5", data_files=str(path), split="train", streaming=True, batch_size=batch_size)
+
+    assert dataset.features == Features({"value": Value("int32")})
+    assert list(dataset) == []
+
+
 @pytest.fixture
 def hdf5_file(tmp_path):
     """Create a basic HDF5 file with numeric datasets."""
