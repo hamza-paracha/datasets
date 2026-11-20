@@ -195,9 +195,12 @@ def _is_vlen_dtype(dtype: np.dtype) -> bool:
 def _create_vlen_features(dset) -> Features:
     vlen_dtype = dset.dtype.metadata["vlen"]
     if vlen_dtype in (str, bytes):
-        return Value("string")
-    inner_feature = _np_to_pa_to_hf_value(vlen_dtype)
-    return List(inner_feature)
+        feature = Value("string")
+    else:
+        feature = List(_np_to_pa_to_hf_value(vlen_dtype))
+    for length in reversed(dset.shape[1:]):
+        feature = List(feature, length=length)
+    return feature
 
 
 def _convert_vlen_to_array(arr: np.ndarray) -> pa.Array:

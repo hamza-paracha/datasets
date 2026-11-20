@@ -390,6 +390,29 @@ def test_hdf5_vlen_arrays(hdf5_file_with_vlen_arrays):
     assert mixed_data[3] == [6]
 
 
+@pytest.mark.parametrize("shape", [(2, 2), (2, 2, 2)])
+@pytest.mark.parametrize("dtype", [str, bytes, np.dtype("int32")], ids=["strings", "bytes", "arrays"])
+@pytest.mark.parametrize("streaming", [False, True])
+def test_hdf5_multidimensional_vlen(tmp_path, shape, dtype, streaming):
+    path = tmp_path / "multidimensional.h5"
+    data = np.empty(shape, dtype=object)
+    with h5py.File(path, "w") as f:
+        dset = f.create_dataset("data", shape=shape, dtype=h5py.vlen_dtype(dtype))
+        for i, index in enumerate(np.ndindex(shape)):
+            value = ("" if i % 2 == 0 else "text") if dtype in (str, bytes) else list(range(i % 3))
+            dset[index] = value
+            data[index] = value
+
+    feature = Value("string") if dtype in (str, bytes) else List(Value("int32"))
+    for length in reversed(shape[1:]):
+        feature = List(feature, length=length)
+
+    dataset = load_dataset("hdf5", data_files=str(path), split="train", streaming=streaming, batch_size=1)
+
+    assert dataset.features == Features({"data": feature})
+    assert list(dataset) == [{"data": row} for row in data.tolist()]
+
+
 def test_hdf5_variable_length_strings(hdf5_file_with_variable_length_strings):
     """Test HDF5 loading with variable-length string datasets."""
     dataset = load_dataset("hdf5", data_files=[hdf5_file_with_variable_length_strings], split="train")
